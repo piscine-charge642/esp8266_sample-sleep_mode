@@ -1,6 +1,6 @@
 /**
  * タスクスケジューラーとティッカー ライブラリーを使ったスリープモード、起動時情報の取得、
- * 信号のエッジ検出、ESP WROOM 02 内部ＡＤＣの読込のサンプルプログラム
+ * 信号のエッジ検出、ESP WROOM 02 内部ＡＤＣの読込、ブザーのサンプルプログラム
  * for PlatformIO
  * 
  * 対応ボード：IOT Integrated Controller V1
@@ -29,6 +29,7 @@ extern "C" {
 #define ADC_A0_1LSB_MV        (0.976562F)   //1000mV ÷ 1024
 #define RTC_RAM_CHECK_CODE    (0x86C3A524)  //4byte, RTC RAM 初期化判断
 #define SW2_PIN               (0)           //プログラムボタンと兼用しているので、起動時の検出はできない
+#define BUZZER_PIN            (13)          //ブザー制御出力　１でブザーＯＮ、０でブザーＯＦＦ
 #define SW2_BUTTON            (0x01)        //0000_0001
 
 /// 構造体
@@ -80,8 +81,11 @@ ADC_MODE(ADC_VCC);                        //ADCは内部のVCC電圧を測定す
  */
 void setup()
 {
+  //--- IOピン出力設定
+  digitalWrite(BUZZER_PIN, LOW);   //BuzzerをOFF
   //--- IOピン設定
   pinMode(SW2_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);    //リセットからこのコードが実行されるまでの間ブザーが鳴ります。実行されればブザーＯＦＦ）
 
   //--- リセットスタート時の起動情報を取得
   ResetStartInfo = system_get_rst_info();
@@ -158,7 +162,11 @@ void loop()
     if(0 < (RTC_RAM_B1.sleep_mode & 0x00000003))
     { //Sleep にはいる
       Serial.printf("Going to Deep-sleep for 30 seconds...\r\n");
-      ESP.deepSleep(30 * 1000000);  //uS単位で指定 
+      digitalWrite(BUZZER_PIN, HIGH); delay(300);   //BuzzerをON
+      digitalWrite(BUZZER_PIN, LOW);  delay(30);    //BuzzerをOFF
+      digitalWrite(BUZZER_PIN, HIGH); delay(1000);  //BuzzerをON
+      digitalWrite(BUZZER_PIN, LOW);                //BuzzerをOFF
+      ESP.deepSleep(30 * 1000000);                  //uS単位で指定 
       delay(1000);
     }
   }
@@ -183,6 +191,7 @@ void MainWork_Callback(void)
   if(0 != (f_FE_SignalDetect & SW2_BUTTON))
   { //ＳＷ２が押下された
     Serial.printf("TASK: MainWork Proc (SW2 ON...)\r\n");
+    digitalWrite(BUZZER_PIN, HIGH); //BuzzerをON
 
     #if(CHECK_INTERRUPT_TIME)
     //80MHz動作の場合、1サイクル = 0.0125μS (1μS = 80サイクル)
@@ -196,6 +205,7 @@ void MainWork_Callback(void)
   if(0 != (f_RE_SignalDetect & SW2_BUTTON))
   { //ＳＷ２が離された
     Serial.printf("TASK: MainWork Proc (SW2 OFF..)\r\n");
+    digitalWrite(BUZZER_PIN, LOW);  //BuzzerをOFF
 
     //スリープモード変更し、RTC RAMに保存
     RTC_RAM_B1.sleep_mode++; 
